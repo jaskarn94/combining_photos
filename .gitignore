@@ -1,5 +1,7 @@
 *.mp4
 images/
+uploads/
+output/
 waveform.png
 __pycache__/
 .DS_Store

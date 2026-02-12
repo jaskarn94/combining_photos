@@ -11,8 +11,27 @@ This is a Python utility for creating professional slideshow videos from multipl
 - **ffmpeg**: Required for video generation. The script calls ffmpeg via subprocess.
   - Check if installed: `which ffmpeg`
   - Install on macOS: `brew install ffmpeg`
+- **Python 3** with **Flask**: Required for the web editor.
+  - Install: `pip install -r requirements.txt`
 
-## Running the Script
+## Running
+
+### Web Editor (recommended)
+
+```bash
+python3 app.py
+```
+
+Opens a local web UI at **http://localhost:8080** where you can:
+- Upload images by dragging them in or clicking to browse
+- Reorder images by dragging them up/down in the list
+- Pick from 44 transition styles (grouped by category)
+- Choose background music from any `.mp3`/`.wav` file in the project folder
+- Adjust settings (duration, quality, resolution, etc.) with sliders and dropdowns
+- Generate the video and preview it right in the browser
+- Download the finished `.mp4` file
+
+### Command Line
 
 ```bash
 python3 create_video.py
@@ -32,7 +51,43 @@ The script automatically:
 
 ## Architecture
 
-**Single-file architecture**: All logic is in `create_video.py`
+The project has two entry points that share the same video-creation engine:
+
+| File | Purpose |
+|------|---------|
+| `create_video.py` | Core video engine (FFmpeg wrapper) + CLI entry point |
+| `app.py` | Flask web server — imports from `create_video.py`, adds no ffmpeg logic |
+| `templates/index.html` | Single-page editor UI (three-panel layout) |
+| `static/style.css` | Dark-theme styling for the editor |
+| `static/app.js` | Frontend logic: upload, drag-reorder, generate, poll, preview |
+| `requirements.txt` | Python dependency (`flask>=3.0`) |
+
+### Web Editor (`app.py`)
+
+- Serves the UI on port **8080**
+- Uploaded images are stored in `uploads/` (gitignored)
+- On generate: copies images with numeric prefixes into a temp `output/job_<id>/images/` folder so the existing `get_image_files()` picks them up in the user's chosen order
+- Video generation runs in a **background thread** so the browser doesn't freeze
+- A simple in-memory `jobs` dict tracks progress (`pending` -> `running` -> `done` / `error`)
+- The frontend polls `/api/jobs/<id>` every second and shows the video when ready
+
+### API Endpoints
+
+| Route | Method | Purpose |
+|-------|--------|---------|
+| `/` | GET | Serve the editor UI |
+| `/api/upload` | POST | Accept image uploads |
+| `/api/images` | GET | List uploaded images |
+| `/api/images/<file>` | GET | Serve an image thumbnail |
+| `/api/images/<file>` | DELETE | Remove an uploaded image |
+| `/api/images/clear` | POST | Remove all uploaded images |
+| `/api/transitions` | GET | Return all 44 transitions grouped by category |
+| `/api/music` | GET | Scan project dir for audio files |
+| `/api/generate` | POST | Start video generation in background |
+| `/api/jobs/<id>` | GET | Poll generation status |
+| `/api/download/<id>` | GET | Stream/download generated video |
+
+### Core Engine (`create_video.py`)
 
 ### Main Functions
 
@@ -114,6 +169,8 @@ create_multi_image_video(
 The following files/directories are gitignored:
 - `*.mp4` - Generated video files (e.g., `output_multi.mp4`)
 - `images/` - Source images directory (keep images private)
+- `uploads/` - Web editor uploaded images
+- `output/` - Web editor generated videos (per-job folders)
 - `waveform.png` - Audio visualization artifacts
 - `__pycache__/` - Python bytecode cache
 - `.DS_Store` - macOS system files
