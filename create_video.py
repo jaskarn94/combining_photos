@@ -3,6 +3,184 @@ import os
 import sys
 import glob
 import json
+import argparse
+
+# Valid xfade transition types for FFmpeg
+VALID_TRANSITIONS = [
+    # Basic fades
+    'fade', 'fadeblack', 'fadewhite', 'dissolve', 'fadegrays',
+    # Wipes
+    'wipeleft', 'wiperight', 'wipeup', 'wipedown',
+    'wipetl', 'wipetr', 'wipebl', 'wipebr',
+    # Slides
+    'slideleft', 'slideright', 'slideup', 'slidedown',
+    # Covers/Reveals
+    'coverleft', 'coverright', 'coverup', 'coverdown',
+    'revealleft', 'revealright', 'revealup', 'revealdown',
+    # Geometric
+    'circlecrop', 'rectcrop', 'radial',
+    # Open/Close
+    'circleopen', 'circleclose', 'vertopen', 'vertclose', 'horzopen', 'horzclose',
+    # Slices
+    'hlslice', 'hrslice', 'vuslice', 'vdslice',
+    # Smooth
+    'smoothleft', 'smoothright', 'smoothup', 'smoothdown',
+    # Diagonal
+    'diagtl', 'diagtr', 'diagbl', 'diagbr',
+    # Special
+    'pixelize', 'distance', 'hblur', 'squeezeh', 'squeezev', 'zoomin',
+    # Wind
+    'hlwind', 'hrwind', 'vuwind', 'vdwind',
+    # Custom
+    'custom'
+]
+
+
+def list_transitions():
+    """
+    Print all available transition types organized by category.
+    """
+    print("\n" + "=" * 70)
+    print("Available Transition Types (44 total)")
+    print("=" * 70)
+
+    categories = {
+        "Professional & Subtle": ['fade', 'fadeblack', 'fadewhite', 'dissolve', 'fadegrays'],
+        "Wipes": ['wipeleft', 'wiperight', 'wipeup', 'wipedown', 'wipetl', 'wipetr', 'wipebl', 'wipebr'],
+        "Slides": ['slideleft', 'slideright', 'slideup', 'slidedown'],
+        "Covers": ['coverleft', 'coverright', 'coverup', 'coverdown'],
+        "Reveals": ['revealleft', 'revealright', 'revealup', 'revealdown'],
+        "Geometric": ['circlecrop', 'rectcrop', 'radial'],
+        "Open/Close": ['circleopen', 'circleclose', 'vertopen', 'vertclose', 'horzopen', 'horzclose'],
+        "Slices": ['hlslice', 'hrslice', 'vuslice', 'vdslice'],
+        "Smooth": ['smoothleft', 'smoothright', 'smoothup', 'smoothdown'],
+        "Diagonal": ['diagtl', 'diagtr', 'diagbl', 'diagbr'],
+        "Special Effects": ['pixelize', 'distance', 'hblur', 'squeezeh', 'squeezev', 'zoomin'],
+        "Wind": ['hlwind', 'hrwind', 'vuwind', 'vdwind'],
+        "Custom": ['custom']
+    }
+
+    for category, transitions in categories.items():
+        print(f"\n{category}:")
+        for i in range(0, len(transitions), 4):
+            row = transitions[i:i+4]
+            print("  " + ", ".join(f"{t:15}" for t in row))
+
+    print("\n" + "=" * 70)
+    print(f"Use --transition <name> or -t <name> to specify a transition")
+    print("Example: python3 create_video.py --transition circlecrop")
+    print("=" * 70 + "\n")
+
+
+def parse_arguments():
+    """
+    Parse command-line arguments for video creation.
+
+    Returns:
+        argparse.Namespace: Parsed arguments
+    """
+    parser = argparse.ArgumentParser(
+        description='Create professional slideshow videos from images with transitions and music.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python3 create_video.py                              # Use default settings
+  python3 create_video.py -t circlecrop                # Use circlecrop transition
+  python3 create_video.py --transition wipeleft        # Use wipeleft transition
+  python3 create_video.py -l                           # List all transitions
+  python3 create_video.py -t smoothright -d 5.0        # 5 seconds per image
+  python3 create_video.py -t fade -o my_video.mp4      # Custom output file
+        """
+    )
+
+    parser.add_argument(
+        '-t', '--transition',
+        type=str,
+        default='fade',
+        metavar='TYPE',
+        help='Transition type (default: fade). Use -l to list all available transitions.'
+    )
+
+    parser.add_argument(
+        '-l', '--list-transitions',
+        action='store_true',
+        help='List all available transition types and exit'
+    )
+
+    parser.add_argument(
+        '-i', '--images',
+        type=str,
+        default='images',
+        metavar='DIR',
+        help='Directory containing images (default: images)'
+    )
+
+    parser.add_argument(
+        '-a', '--audio',
+        type=str,
+        default='background_music.mp3',
+        metavar='FILE',
+        help='Background music file (default: background_music.mp3)'
+    )
+
+    parser.add_argument(
+        '-o', '--output',
+        type=str,
+        default='output_multi.mp4',
+        metavar='FILE',
+        help='Output video file (default: output_multi.mp4)'
+    )
+
+    parser.add_argument(
+        '-d', '--duration',
+        type=float,
+        default=3.5,
+        metavar='SECS',
+        help='Duration per image in seconds (default: 3.5)'
+    )
+
+    parser.add_argument(
+        '--transition-duration',
+        type=float,
+        default=1.0,
+        metavar='SECS',
+        help='Transition duration in seconds (default: 1.0)'
+    )
+
+    parser.add_argument(
+        '-r', '--resolution',
+        type=str,
+        default='1920x1080',
+        metavar='WIDTHxHEIGHT',
+        help='Output resolution (default: 1920x1080)'
+    )
+
+    parser.add_argument(
+        '--fps',
+        type=int,
+        default=30,
+        metavar='N',
+        help='Frame rate (default: 30)'
+    )
+
+    parser.add_argument(
+        '--crf',
+        type=int,
+        default=18,
+        metavar='N',
+        help='Quality: 0-51, lower=better (default: 18)'
+    )
+
+    parser.add_argument(
+        '--preset',
+        type=str,
+        default='slow',
+        choices=['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow'],
+        help='Encoding preset (default: slow)'
+    )
+
+    return parser.parse_args()
+
 
 # Define the paths
 image_path = "images/Screenshot 2026-02-11 at 11.04.59 PM.png"
@@ -119,7 +297,7 @@ def get_audio_duration(audio_path):
         raise ValueError(f"Could not parse audio duration: {e}")
 
 
-def build_filter_complex(num_images, duration_per_image, transition_duration, resolution=(1920, 1080), fps=30):
+def build_filter_complex(num_images, duration_per_image, transition_duration, transition_type='fade', resolution=(1920, 1080), fps=30):
     """
     Build FFmpeg filter_complex string for multi-image video with crossfade transitions.
 
@@ -127,6 +305,7 @@ def build_filter_complex(num_images, duration_per_image, transition_duration, re
         num_images: Number of images
         duration_per_image: Display time per image (seconds)
         transition_duration: Crossfade duration (seconds)
+        transition_type: xfade transition type (e.g., 'fade', 'wipeleft', 'circlecrop')
         resolution: Output resolution as (width, height)
         fps: Frame rate
 
@@ -179,7 +358,7 @@ def build_filter_complex(num_images, duration_per_image, transition_duration, re
 
             xfade_filter = (
                 f"{input_a}{input_b}"
-                f"xfade=transition=fade:duration={transition_duration}:offset={offset}"
+                f"xfade=transition={transition_type}:duration={transition_duration}:offset={offset}"
                 f"{output}"
             )
             filters.append(xfade_filter)
@@ -197,6 +376,7 @@ def create_multi_image_video(
     output_path='output_multi.mp4',
     duration_per_image=3.5,
     transition_duration=1.0,
+    transition_type='fade',
     resolution=(1920, 1080),
     fps=30,
     crf=18,
@@ -211,6 +391,7 @@ def create_multi_image_video(
         output_path: Path for output video file
         duration_per_image: Display time per image in seconds
         transition_duration: Crossfade transition duration in seconds
+        transition_type: xfade transition type (default: 'fade')
         resolution: Output resolution as (width, height)
         fps: Frame rate
         crf: Constant Rate Factor (0-51, lower = better quality, 18 = visually lossless)
@@ -223,6 +404,12 @@ def create_multi_image_video(
     print(f"  Image directory: {image_directory}")
     print(f"  Audio file: {audio_path}")
     print(f"  Output: {output_path}")
+
+    # Validate transition type
+    if transition_type not in VALID_TRANSITIONS:
+        print(f"\nWarning: '{transition_type}' is not a recognized transition type. Using 'fade' instead.")
+        print(f"Valid transitions: {', '.join(VALID_TRANSITIONS[:10])}... (and {len(VALID_TRANSITIONS)-10} more)")
+        transition_type = 'fade'
 
     # Step 1: Discover images
     print("\n[1/6] Discovering images...")
@@ -256,6 +443,7 @@ def create_multi_image_video(
         len(image_files),
         duration_per_image,
         transition_duration,
+        transition_type,
         resolution,
         fps
     )
@@ -388,10 +576,21 @@ def create_video():
         print(f"ffmpeg output: {e.stderr}")
 
 if __name__ == "__main__":
-    # Hardcoded paths for simple execution
-    image_directory = "images"
-    audio_path = "background_music.mp3"
-    output_path = "output_multi.mp4"
+    # Parse command-line arguments
+    args = parse_arguments()
+
+    # Handle --list-transitions flag
+    if args.list_transitions:
+        list_transitions()
+        sys.exit(0)
+
+    # Parse resolution string (e.g., "1920x1080" -> (1920, 1080))
+    try:
+        width, height = map(int, args.resolution.lower().split('x'))
+        resolution = (width, height)
+    except ValueError:
+        print(f"✗ Error: Invalid resolution format '{args.resolution}'. Use format: WIDTHxHEIGHT (e.g., 1920x1080)")
+        sys.exit(1)
 
     print("=" * 60)
     print("Multi-Image Video Creator with Transitions")
@@ -399,9 +598,16 @@ if __name__ == "__main__":
 
     try:
         create_multi_image_video(
-            image_directory=image_directory,
-            audio_path=audio_path,
-            output_path=output_path
+            image_directory=args.images,
+            audio_path=args.audio,
+            output_path=args.output,
+            duration_per_image=args.duration,
+            transition_duration=args.transition_duration,
+            transition_type=args.transition,
+            resolution=resolution,
+            fps=args.fps,
+            crf=args.crf,
+            preset=args.preset
         )
         print("\n" + "=" * 60)
         print("Done!")
