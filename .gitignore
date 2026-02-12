@@ -1,5 +1,5 @@
 *.mp4
 images/
-background_music.mp3
 waveform.png
 __pycache__/
+.DS_Store
